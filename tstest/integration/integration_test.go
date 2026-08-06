@@ -878,9 +878,6 @@ func TestConfigFileAuthKey(t *testing.T) {
 }
 
 func TestTwoNodes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("multiple nodes need the userspace-peer harness; see #20711")
-	}
 	tstest.Parallel(t)
 	env := NewTestEnv(t)
 
@@ -919,10 +916,11 @@ func TestTwoNodes(t *testing.T) {
 		os.WriteFile("n2.log", cleanLog(n2), 0666)
 	})
 
-	n1Socks := n1.AwaitSocksAddr(n1SocksAddrCh)
-	n2Socks := n1.AwaitSocksAddr(n2SocksAddrCh)
-	t.Logf("node1 SOCKS5 addr: %v", n1Socks)
-	t.Logf("node2 SOCKS5 addr: %v", n2Socks)
+	if runtime.GOOS != "windows" {
+		// The service node has no stderr to scrape the address from; see #20443.
+		t.Logf("node1 SOCKS5 addr: %v", n1.AwaitSocksAddr(n1SocksAddrCh))
+		t.Logf("node2 SOCKS5 addr: %v", n1.AwaitSocksAddr(n2SocksAddrCh))
+	}
 
 	n1.AwaitListening()
 	t.Logf("n1 is listening")
@@ -966,9 +964,6 @@ func TestTwoNodes(t *testing.T) {
 // tests two nodes where the first gets a incremental MapResponse (with only
 // PeersRemoved set) saying that the second node disappeared.
 func TestIncrementalMapUpdatePeersRemoved(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("multiple nodes need the userspace-peer harness; see #20711")
-	}
 	tstest.Parallel(t)
 	env := NewTestEnv(t)
 
@@ -1663,7 +1658,7 @@ func TestAutoUpdateDefaults_cap(t *testing.T) { testAutoUpdateDefaults(t, true) 
 // DeprecatedDefaultAutoUpdate top-level MapResponse field).
 func testAutoUpdateDefaults(t *testing.T, useCap bool) {
 	if runtime.GOOS == "windows" {
-		t.Skip("multiple nodes need the userspace-peer harness; see #20711")
+		t.Skip("reads prefs from the service's state file, which the test process can't; see #20750")
 	}
 	t.Cleanup(feature.HookCanAutoUpdate.SetForTest(func() bool { return true }))
 
@@ -2355,9 +2350,6 @@ func TestPeerRelayPing(t *testing.T) {
 }
 
 func TestC2NDebugNetmap(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("multiple nodes need the userspace-peer harness; see #20711")
-	}
 	tstest.Parallel(t)
 	env := NewTestEnv(t, ConfigureControl(func(s *testcontrol.Server) {
 		s.CollectServices = opt.False
@@ -2640,12 +2632,10 @@ func TestTailnetLock(t *testing.T) {
 }
 
 func TestNodeWithBadStateFile(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("service harness can't seed a corrupt state file before start; see #20750")
-	}
 	tstest.Parallel(t)
 	env := NewTestEnv(t)
-	n1 := NewTestNode(t, env)
+	// A peer keeps its state in the test's temp dir, where the corrupt file can be seeded.
+	n1 := NewTestNode(t, env, AsPeer())
 	if err := os.WriteFile(n1.stateFile, []byte("bad json"), 0644); err != nil {
 		t.Fatal(err)
 	}
